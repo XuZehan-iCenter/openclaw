@@ -252,6 +252,10 @@ function isChatResetCommand(text: string) {
   if (normalized === "/new" || normalized === "/reset") {
     return true;
   }
+  // Soft reset ("/reset soft") is silent and in-place; no confirmation dialog needed.
+  if (normalized.startsWith("/reset soft") || normalized.startsWith("/new soft")) {
+    return false;
+  }
   return normalized.startsWith("/new ") || normalized.startsWith("/reset ");
 }
 
@@ -1874,7 +1878,7 @@ async function dispatchSlashCommand(
       await host.onSlashAction("new-session");
       return;
     case "reset":
-      await sendChatMessageNow(host, "/reset", {
+      await sendChatMessageNow(host, args ? `/reset ${args}` : "/reset", {
         refreshSessions: true,
         previousDraft: sendOpts?.previousDraft,
         restoreDraft: sendOpts?.restoreDraft,
