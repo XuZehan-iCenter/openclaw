@@ -5,7 +5,6 @@ import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SkillsChangeEvent } from "./refresh.js";
 
-type WatchEvent = "add" | "change" | "unlink" | "unlinkDir" | "addDir" | "error" | "raw";
 type WatchCallback = (...args: string[]) => void;
 
 function createMockWatcher() {
