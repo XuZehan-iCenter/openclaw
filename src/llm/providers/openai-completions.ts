@@ -885,6 +885,22 @@ function buildCacheControlledTextParts(
   return parts.length > 0 ? parts : [{ type: "text", text: "" }];
 }
 
+/**
+ * DashScope's OpenAI-compatible endpoint rejects the standard `image_url` content
+ * part format for Qwen vision models. It expects `{type: "image", image: "<data-uri>"}`
+ * instead of `{type: "image_url", image_url: {url: "<data-uri>"}}`.
+ */
+function isDashScopeEndpoint(model: Model<"openai-completions">): boolean {
+  const provider = model.provider?.toLowerCase() ?? "";
+  const baseUrl = model.baseUrl?.toLowerCase() ?? "";
+  return (
+    provider.includes("dashscope") ||
+    provider === "qwen" ||
+    provider === "qwen-dashscope" ||
+    baseUrl.includes("dashscope.aliyuncs.com")
+  );
+}
+
 export function convertMessages(
   model: Model<"openai-completions">,
   context: Context,
@@ -957,6 +973,12 @@ export function convertMessages(
                 type: "text",
                 text: sanitizeSurrogates(item.text),
               } satisfies ChatCompletionContentPartText;
+            }
+            if (isDashScopeEndpoint(model)) {
+              return {
+                type: "image",
+                image: `data:${item.mimeType};base64,${item.data}`,
+              } as unknown as ChatCompletionContentPartImage;
             }
             return {
               type: "image_url",
@@ -1108,12 +1130,19 @@ export function convertMessages(
         if (hasImages && model.input.includes("image")) {
           for (const block of toolMsg.content) {
             if (isImageContentBlock(block)) {
-              imageBlocks.push({
-                type: "image_url",
-                image_url: {
-                  url: `data:${block.mimeType};base64,${block.data}`,
-                },
-              });
+              if (isDashScopeEndpoint(model)) {
+                imageBlocks.push({
+                  type: "image",
+                  image: `data:${block.mimeType};base64,${block.data}`,
+                } as unknown as (typeof imageBlocks)[number]);
+              } else {
+                imageBlocks.push({
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${block.mimeType};base64,${block.data}`,
+                  },
+                });
+              }
             }
           }
         }
