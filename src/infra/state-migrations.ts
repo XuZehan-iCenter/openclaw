@@ -458,6 +458,24 @@ function legacyInstallRecordHasCurrentResolvedIdentity(params: {
   return Boolean(legacyResolvedSpec && currentResolvedSpec === legacyResolvedSpec);
 }
 
+/**
+ * Checks whether two install records refer to the same npm package by
+ * comparing resolvedName fields. This is a broader identity check than
+ * legacyInstallRecordHasCurrentResolvedIdentity: it tolerates version,
+ * installPath, and other metadata differences that arise from npm layout
+ * migrations (e.g. flat node_modules/ → per-project projects/<hash>/node_modules/).
+ */
+function legacyInstallRecordSamePackageIdentity(
+  currentRecord: InstalledPluginIndex["installRecords"][string],
+  legacyRecord: InstalledPluginIndex["installRecords"][string],
+): boolean {
+  const currentResolvedName = readInstallRecordStringField(currentRecord, "resolvedName");
+  const legacyResolvedName = readInstallRecordStringField(legacyRecord, "resolvedName");
+  return Boolean(
+    currentResolvedName && legacyResolvedName && currentResolvedName === legacyResolvedName,
+  );
+}
+
 function legacyInstallRecordCoveredByCurrent(
   currentRecord: InstalledPluginIndex["installRecords"][string],
   legacyRecord: InstalledPluginIndex["installRecords"][string],
@@ -477,6 +495,22 @@ function legacyInstallRecordCoveredByCurrent(
       continue;
     }
     if ((key === "resolvedAt" || key === "installedAt") && typeof currentValue === "string") {
+      continue;
+    }
+    // Tolerate installPath, version, resolvedVersion, integrity, and shasum
+    // differences when the current record covers the same package identity.
+    // This handles npm layout migrations (e.g. flat node_modules/ to per-project
+    // projects/<hash>/node_modules/) that change the install path and version
+    // metadata without altering the plugin identity.
+    if (
+      legacyInstallRecordSamePackageIdentity(currentRecord, legacyRecord) &&
+      (key === "installPath" ||
+        key === "version" ||
+        key === "resolvedVersion" ||
+        key === "resolvedSpec" ||
+        key === "integrity" ||
+        key === "shasum")
+    ) {
       continue;
     }
     return false;

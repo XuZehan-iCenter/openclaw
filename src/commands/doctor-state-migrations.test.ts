@@ -1690,6 +1690,50 @@ describe("doctor legacy state migrations", () => {
     });
   });
 
+  it("archives legacy index when installPath differs due to npm layout migration but package identity matches", async () => {
+    const root = await makeTempRoot();
+    await writeExistingPluginInstallIndex(root, {
+      brave: {
+        source: "npm",
+        spec: "@openclaw/brave-plugin@2026.6.6",
+        version: "2026.6.6",
+        resolvedName: "@openclaw/brave-plugin",
+        resolvedVersion: "2026.6.6",
+        resolvedSpec: "@openclaw/brave-plugin@2026.6.6",
+        integrity: "sha512-current",
+        shasum: "current-sha",
+        installPath:
+          "~/.openclaw/npm/projects/openclaw-brave-plugin-11fe9e3aa3/node_modules/@openclaw/brave-plugin",
+        resolvedAt: "2026-06-13T07:20:34.572Z",
+        installedAt: "2026-06-13T07:20:37.359Z",
+      },
+    });
+    const sourcePath = writeLegacyPluginInstallIndex(root, {
+      brave: {
+        source: "npm",
+        spec: "@openclaw/brave-plugin",
+        version: "2026.5.26",
+        resolvedName: "@openclaw/brave-plugin",
+        resolvedVersion: "2026.5.26",
+        resolvedSpec: "@openclaw/brave-plugin@2026.5.26",
+        integrity: "sha512-legacy",
+        shasum: "legacy-sha",
+        installPath: "~/.openclaw/npm/node_modules/@openclaw/brave-plugin",
+        resolvedAt: "2026-05-27T13:03:44.736Z",
+        installedAt: "2026-05-27T13:03:47.378Z",
+      },
+    });
+
+    const result = await runLegacyStateMigrationsForRoot(root);
+
+    expect(result.warnings).toStrictEqual([]);
+    expect(result.changes).toContain(
+      "Archived plugin install index legacy source → " + `${sourcePath}.migrated`,
+    );
+    expect(fs.existsSync(sourcePath)).toBe(false);
+    expect(fs.existsSync(`${sourcePath}.migrated`)).toBe(true);
+  });
+
   for (const fixture of [
     {
       label: "name different packages",
