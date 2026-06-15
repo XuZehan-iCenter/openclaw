@@ -103,7 +103,19 @@ export async function minimaxTTS(params: {
     try {
       await assertOkOrThrowProviderError(response, "MiniMax TTS API error");
 
-      const body = (await response.json()) as { data?: { audio?: string } };
+      const body = (await response.json()) as {
+        data?: { audio?: string };
+        base_resp?: { status_code?: number; status_msg?: string };
+      };
+
+      const baseResp = body?.base_resp;
+      if (baseResp && typeof baseResp.status_code === "number" && baseResp.status_code !== 0) {
+        const msg = baseResp.status_msg ?? "";
+        throw new Error(
+          `MiniMax TTS API error (${baseResp.status_code}): ${msg}`,
+        );
+      }
+
       const hexAudio = body?.data?.audio;
       if (!hexAudio) {
         throw new Error("MiniMax TTS API returned no audio data");

@@ -20,6 +20,30 @@ describe("minimaxTTS", () => {
     vi.restoreAllMocks();
   });
 
+  it("throws on base_resp error so TTS fallback fires", async () => {
+    fetchWithSsrFGuardMock.mockResolvedValue({
+      response: new Response(
+        JSON.stringify({
+          data: { audio: Buffer.from("placeholder").toString("hex") },
+          base_resp: { status_code: 1002, status_msg: "quota exceeded" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+      release: vi.fn(async () => undefined),
+    });
+
+    await expect(
+      minimaxTTS({
+        text: "hello",
+        apiKey: "sk-test",
+        baseUrl: "https://api.minimax.io",
+        model: "speech-2.8-hd",
+        voiceId: "English_expressive_narrator",
+        timeoutMs: 30_000,
+      }),
+    ).rejects.toThrow("MiniMax TTS API error (1002): quota exceeded");
+  });
+
   it("caps oversized request timeout before arming abort timers", async () => {
     const timeoutSpy = vi
       .spyOn(globalThis, "setTimeout")
