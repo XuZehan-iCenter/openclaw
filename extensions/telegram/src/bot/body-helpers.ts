@@ -5,6 +5,7 @@ import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { convertTelegramRichMessageToMarkdown } from "./rich-message-inbound.js";
 
 type TelegramMediaMessage = Pick<
   Message,
@@ -103,18 +104,31 @@ export function isBinaryContent(text: string): boolean {
   return false;
 }
 
-export function resolveTelegramTextContent(text: unknown, caption?: unknown): string {
+export function resolveTelegramTextContent(
+  text: unknown,
+  caption?: unknown,
+  richMessage?: unknown,
+): string {
   const raw = typeof text === "string" ? text : typeof caption === "string" ? caption : "";
-  return isBinaryContent(raw) ? "" : raw;
+  if (raw) {
+    return isBinaryContent(raw) ? "" : raw;
+  }
+  // Bot API 10.1: rich_message arrives when there is no text/caption.
+  const richText = convertTelegramRichMessageToMarkdown(
+    richMessage as Parameters<typeof convertTelegramRichMessageToMarkdown>[0],
+  );
+  return richText ?? "";
 }
 
 export function getTelegramTextParts(
-  msg: Pick<Message, "text" | "caption" | "entities" | "caption_entities">,
+  msg: Pick<Message, "text" | "caption" | "entities" | "caption_entities"> & {
+    rich_message?: unknown;
+  },
 ): {
   text: string;
   entities: TelegramTextEntity[];
 } {
-  const text = resolveTelegramTextContent(msg.text, msg.caption);
+  const text = resolveTelegramTextContent(msg.text, msg.caption, msg.rich_message);
   const entities = text ? (msg.entities ?? msg.caption_entities ?? []) : [];
   return { text, entities };
 }
