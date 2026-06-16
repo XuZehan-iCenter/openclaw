@@ -43,6 +43,32 @@ export function cacheInboundMessageMeta(
   cache.set(makeCacheKey(accountId, remoteJid, messageId), { ...meta, ts: Date.now() });
 }
 
+/**
+ * Cache metadata for an outbound (bot-sent) message so that subsequent
+ * replies to this message can construct a correct quote key.
+ *
+ * Without this, a user swipe-replying to the bot's own message on
+ * WhatsApp Desktop would see a missing reply bubble because
+ * `lookupInboundMessageMeta` misses for bot-sent messages and defaults
+ * to `fromMe: false` with the wrong participant JID.
+ */
+export function cacheOutboundMessageMeta(
+  accountId: string,
+  remoteJid: string,
+  messageId: string,
+  botJid: string | undefined,
+  body?: string,
+): void {
+  if (!accountId || !messageId || !remoteJid) {
+    return;
+  }
+  cacheInboundMessageMeta(accountId, remoteJid, messageId, {
+    participant: botJid,
+    fromMe: true,
+    body,
+  });
+}
+
 export function lookupInboundMessageMeta(
   accountId: string,
   remoteJid: string,

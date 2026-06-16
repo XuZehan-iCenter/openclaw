@@ -24,7 +24,7 @@ import { readWebSelfIdentityForDecision, WhatsAppAuthUnstableError } from "../au
 import { getRegisteredWhatsAppConnectionController } from "../connection-controller-registry.js";
 import { getPrimaryIdentityId, identitiesOverlap, resolveComparableIdentity } from "../identity.js";
 import { addWhatsAppImagePreviewFields } from "../image-preview.js";
-import { cacheInboundMessageMeta } from "../quoted-message.js";
+import { cacheInboundMessageMeta, cacheOutboundMessageMeta } from "../quoted-message.js";
 import { DEFAULT_RECONNECT_POLICY, computeBackoff, sleepWithAbort } from "../reconnect.js";
 import type { OpenClawConfig } from "../runtime-api.js";
 import { createWaSocket, formatError, getStatusCode, waitForWaConnection } from "../session.js";
@@ -529,6 +529,34 @@ export async function attachWebInboxToSocket(
             },
           ).sendMessage(jid, content, sendOptions);
           rememberOutboundMessage(jid, result);
+          // Cache outbound message metadata so that subsequent replies to this
+          // message can construct a correct quote key.  Without this, a user
+          // swipe-replying to the bot's own message on WhatsApp Desktop would
+          // see a missing reply bubble because the cache lookup misses and
+          // defaults to fromMe: false with the wrong participant JID.
+          const resultMsgId =
+            typeof result === "object" && result && "key" in result
+              ? (result as { key?: { id?: string } }).key?.id
+              : undefined;
+          if (resultMsgId) {
+            const body =
+              "conversation" in content
+                ? (content.conversation as string)
+                : "extendedTextMessage" in content
+                  ? ((content as { extendedTextMessage?: { text?: string } }).extendedTextMessage?.text)
+                  : "imageMessage" in content
+                    ? ((content as { imageMessage?: { caption?: string } }).imageMessage?.caption)
+                    : "videoMessage" in content
+                      ? ((content as { videoMessage?: { caption?: string } }).videoMessage?.caption)
+                      : undefined;
+            cacheOutboundMessageMeta(
+              options.accountId,
+              jid,
+              resultMsgId,
+              self.jid ?? undefined,
+              body,
+            );
+          }
           return result;
         } catch (err) {
           if (!shouldRetryDisconnect() || !isRetryableSendDisconnectError(err)) {
