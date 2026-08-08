@@ -8,6 +8,7 @@ import { ensureAuthProfileStore } from "../agents/auth-profiles/store.js";
 import { resolveApiKeyForProvider as resolveModelApiKeyForProvider } from "../agents/model-auth.js";
 import { normalizeProviderId } from "../agents/model-selection.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { endWithContentLength } from "../infra/http-body.js";
 import { escapeHtml } from "../shared/html-escape.js";
 import { resolveTimerTimeoutMs } from "../shared/number-coercion.js";
 
@@ -197,65 +198,53 @@ export async function waitForLocalOAuthCallback(params: {
         );
         const requestUrl = new URL(req.url ?? "/", params.redirectUri);
         if (req.method === "OPTIONS") {
-          res.statusCode = 204;
-          res.end();
+          endWithContentLength(res, 204, "");
           return;
         }
         if (requestUrl.pathname !== params.callbackPath) {
-          res.statusCode = 404;
-          res.setHeader("Content-Type", "text/plain");
-          res.end("Not found");
+          endWithContentLength(res, 404, "Not found", "text/plain");
           return;
         }
         if (req.method !== "GET") {
-          res.statusCode = 405;
           res.setHeader("Allow", "GET, OPTIONS");
-          res.setHeader("Content-Type", "text/plain");
-          res.end("Method not allowed");
+          endWithContentLength(res, 405, "Method not allowed", "text/plain");
           return;
         }
 
         const state = requestUrl.searchParams.get("state")?.trim();
         if (!state) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "text/plain");
           res.once("finish", () => finish(new Error("Missing OAuth state"), undefined, true));
-          res.end("Missing state");
+          endWithContentLength(res, 400, "Missing state", "text/plain");
           return;
         }
         if (state !== params.expectedState) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "text/plain");
           res.once("finish", () => finish(new Error("OAuth state mismatch"), undefined, true));
-          res.end("Invalid state");
+          endWithContentLength(res, 400, "Invalid state", "text/plain");
           return;
         }
 
         const error = requestUrl.searchParams.get("error");
         if (error) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "text/plain");
           res.once("finish", () => finish(new Error(`OAuth error: ${error}`), undefined, true));
-          res.end(`Authentication failed: ${error}`);
+          endWithContentLength(res, 400, `Authentication failed: ${error}`, "text/plain");
           return;
         }
 
         const code = requestUrl.searchParams.get("code")?.trim();
         if (!code) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "text/plain");
           res.once("finish", () => finish(new Error("Missing OAuth code"), undefined, true));
-          res.end("Missing code");
+          endWithContentLength(res, 400, "Missing code", "text/plain");
           return;
         }
 
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.once("finish", () => finish(undefined, { code, state }, true));
-        res.end(
+        endWithContentLength(
+          res,
+          200,
           "<!doctype html><html><head><meta charset='utf-8'/></head>" +
             `<body><h2>${escapedSuccessTitle}</h2>` +
             "<p>You can close this window and return to OpenClaw.</p></body></html>",
+          "text/html; charset=utf-8",
         );
       } catch (err) {
         finish(err instanceof Error ? err : new Error("OAuth callback failed"), undefined, true);

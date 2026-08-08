@@ -1,6 +1,7 @@
 // Webhook target helpers resolve and validate plugin webhook destinations.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { canonicalizePathVariant } from "../gateway/security-path.js";
+import { endWithContentLength } from "../infra/http-body.js";
 import { registerPluginHttpRoute } from "../plugins/http-registry.js";
 import type { FixedWindowRateLimiter } from "./webhook-memory-guards.js";
 import {
@@ -18,9 +19,6 @@ export type RegisteredWebhookTarget<T> = {
 
 /** Lifecycle hooks for path-level webhook target registration. */
 export type RegisterWebhookTargetOptions<T extends { path: string }> = {
-  /** Called before the first target for a normalized path is stored; may return path teardown. */
-  onFirstPathTarget?: (params: { path: string; target: T }) => void | (() => void);
-  /** Called after the last target for a normalized path has been removed. */
   onLastPathTargetRemoved?: (params: { path: string }) => void;
 };
 
@@ -363,12 +361,18 @@ function resolveWebhookTargetMatchOrReject<T>(
     return match.target;
   }
   if (match.kind === "ambiguous") {
-    params.res.statusCode = params.ambiguousStatusCode ?? 401;
-    params.res.end(params.ambiguousMessage ?? "ambiguous webhook target");
+    endWithContentLength(
+      params.res,
+      params.ambiguousStatusCode ?? 401,
+      params.ambiguousMessage ?? "ambiguous webhook target",
+    );
     return null;
   }
-  params.res.statusCode = params.unauthorizedStatusCode ?? 401;
-  params.res.end(params.unauthorizedMessage ?? "unauthorized");
+  endWithContentLength(
+    params.res,
+    params.unauthorizedStatusCode ?? 401,
+    params.unauthorizedMessage ?? "unauthorized",
+  );
   return null;
 }
 
@@ -377,8 +381,7 @@ export function rejectNonPostWebhookRequest(req: IncomingMessage, res: ServerRes
   if (req.method === "POST") {
     return false;
   }
-  res.statusCode = 405;
   res.setHeader("Allow", "POST");
-  res.end("Method Not Allowed");
+  endWithContentLength(res, 405, "Method Not Allowed");
   return true;
 }

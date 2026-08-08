@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { normalizeOptionalLowercaseString } from "../../packages/normalization-core/src/string-coerce.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import {
+  endWithContentLength,
   isRequestBodyLimitError,
   readJsonBodyWithLimit,
   readRequestBodyWithLimit,
@@ -85,22 +86,18 @@ function respondWebhookBodyReadError(params: {
 }): { ok: false } {
   const { res, code, invalidMessage } = params;
   if (code === "PAYLOAD_TOO_LARGE") {
-    res.statusCode = 413;
-    res.end(requestBodyErrorToText("PAYLOAD_TOO_LARGE"));
+    endWithContentLength(res, 413, requestBodyErrorToText("PAYLOAD_TOO_LARGE"));
     return { ok: false };
   }
   if (code === "REQUEST_BODY_TIMEOUT") {
-    res.statusCode = 408;
-    res.end(requestBodyErrorToText("REQUEST_BODY_TIMEOUT"));
+    endWithContentLength(res, 408, requestBodyErrorToText("REQUEST_BODY_TIMEOUT"));
     return { ok: false };
   }
   if (code === "CONNECTION_CLOSED") {
-    res.statusCode = 400;
-    res.end(requestBodyErrorToText("CONNECTION_CLOSED"));
+    endWithContentLength(res, 400, requestBodyErrorToText("CONNECTION_CLOSED"));
     return { ok: false };
   }
-  res.statusCode = 400;
-  res.end(invalidMessage ?? "Bad Request");
+  endWithContentLength(res, 400, invalidMessage ?? "Bad Request");
   return { ok: false };
 }
 
@@ -186,9 +183,8 @@ export function applyBasicWebhookRequestGuards(params: {
 }): boolean {
   const allowMethods = params.allowMethods?.length ? params.allowMethods : null;
   if (allowMethods && !allowMethods.includes(params.req.method ?? "")) {
-    params.res.statusCode = 405;
     params.res.setHeader("Allow", allowMethods.join(", "));
-    params.res.end("Method Not Allowed");
+    endWithContentLength(params.res, 405, "Method Not Allowed");
     return false;
   }
 
@@ -197,8 +193,7 @@ export function applyBasicWebhookRequestGuards(params: {
     params.rateLimitKey &&
     params.rateLimiter.isRateLimited(params.rateLimitKey, params.nowMs ?? Date.now())
   ) {
-    params.res.statusCode = 429;
-    params.res.end("Too Many Requests");
+    endWithContentLength(params.res, 429, "Too Many Requests");
     return false;
   }
 
@@ -207,8 +202,7 @@ export function applyBasicWebhookRequestGuards(params: {
     params.req.method === "POST" &&
     !isJsonContentType(params.req.headers["content-type"])
   ) {
-    params.res.statusCode = 415;
-    params.res.end("Unsupported Media Type");
+    endWithContentLength(params.res, 415, "Unsupported Media Type");
     return false;
   }
 
@@ -257,8 +251,11 @@ export function beginWebhookRequestPipelineOrReject(params: {
   const inFlightKey = params.inFlightKey ?? "";
   const inFlightLimiter = params.inFlightLimiter;
   if (inFlightLimiter && inFlightKey && !inFlightLimiter.tryAcquire(inFlightKey)) {
-    params.res.statusCode = params.inFlightLimitStatusCode ?? 429;
-    params.res.end(params.inFlightLimitMessage ?? "Too Many Requests");
+    endWithContentLength(
+      params.res,
+      params.inFlightLimitStatusCode ?? 429,
+      params.inFlightLimitMessage ?? "Too Many Requests",
+    );
     return { ok: false };
   }
 

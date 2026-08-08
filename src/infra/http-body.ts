@@ -480,6 +480,23 @@ export type RequestBodyLimitGuardOptions = {
   responseText?: Partial<Record<RequestBodyLimitErrorCode, string>>;
 };
 
+/** Send an HTTP response with explicit Content-Length header. */
+export function endWithContentLength(
+  res: ServerResponse,
+  statusCode: number,
+  body: string,
+  contentType?: string,
+): void {
+  res.statusCode = statusCode;
+  if (contentType) {
+    res.setHeader("Content-Type", contentType);
+  }
+  if (statusCode !== 204) {
+    res.setHeader("Content-Length", String(Buffer.byteLength(body)));
+  }
+  res.end(body);
+}
+
 export function installRequestBodyLimitGuard(
   req: IncomingMessage,
   res: ServerResponse,
